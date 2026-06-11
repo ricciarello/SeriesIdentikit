@@ -205,7 +205,7 @@ def main():
     """, unsafe_allow_html=True)
 
     # ── HERO ──────────────────────────────────────────────────────────────────
-    st.markdown('<div class="hero-title">🎬 SerieIdentikit</div>', unsafe_allow_html=True)
+    st.markdown('<div class="hero-title">🎬 Series Identikit</div>', unsafe_allow_html=True)
     st.markdown("""
     <div class="hero-desc">
         Tre serie TV. Migliaia di dati nascosti dietro ogni titolo.<br>
@@ -227,7 +227,7 @@ def main():
         show_how = st.button("❓ Come funziona?", use_container_width=True)
 
     if show_how:
-        with st.expander("🔬 Come funziona SerieIdentikit", expanded=True):
+        with st.expander("🔬 Come funziona Series Identikit", expanded=True):
             st.markdown("""
             <div class="how-step">
                 <div class="how-num">1</div>
