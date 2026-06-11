@@ -1,8 +1,10 @@
-# 🎬 SerieIdentikit
+# 🎬 Series Identikit
 
 > Scegli 3 serie TV che ami. Scopri che tipo di spettatore sei.
 
 Un'app Streamlit che analizza i tuoi gusti cinematografici tramite le API di TMDb e costruisce una **carta d'identità psicologica** basata sui generi delle serie selezionate — con radar chart, barre di profilo e raccomandazioni personalizzate.
+
+Puoi visitarlo qui 👉🏻 [Series Identikit](https://ricciarello-seriesidentikit.streamlit.app/)
 
 ## Demo
 
