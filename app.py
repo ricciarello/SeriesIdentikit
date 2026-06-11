@@ -106,7 +106,7 @@ def make_radar(profile: dict):
 
 # ── MAIN ──────────────────────────────────────────────────────────────────────
 def main():
-    st.set_page_config(page_title="SerieIdentikit", page_icon="🎬", layout="wide")
+    st.set_page_config(page_title="Series Identikit", page_icon="🎬", layout="wide")
 
     st.markdown("""
     <style>
