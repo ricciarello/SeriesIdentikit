@@ -183,6 +183,14 @@ def main():
     }
     .how-text h4 { margin: 0 0 0.2rem 0; font-size: 0.95rem; color: #eee; }
     .how-text p  { margin: 0; font-size: 0.85rem; color: #999; line-height: 1.5; }
+                
+    /* Margini laterali su desktop */
+    .block-container {
+    max-width: 1100px !important;
+    padding-left: 3rem !important;
+    padding-right: 3rem !important;
+    margin: 0 auto !important;
+}
     </style>
     """, unsafe_allow_html=True)
 
@@ -281,8 +289,6 @@ def main():
                 s = st.session_state[key_confirmed]
                 year = s.get("first_air_date", "????")[:4]
                 poster = s.get("poster_path")
-                if poster:
-                    st.image(TMDB_IMG + poster, use_container_width=True)
                 st.markdown(f"""
                 <div class="selected-badge">
                     <span class="s-tick">✓</span>
@@ -294,6 +300,8 @@ def main():
                     if key_q in st.session_state:
                         del st.session_state[key_q]
                     st.rerun()
+                if poster:
+                    st.image(TMDB_IMG + poster, use_container_width=True)
                 selected_series.append(s)
             else:
                 query = st.text_input(
