@@ -6,23 +6,21 @@ from collections import defaultdict
 import os
 
 # ── CONFIG ────────────────────────────────────────────────────────────────────
-TMDB_API_KEY = os.getenv("TMDB_API_KEY", "")  # metti in .env o Streamlit secrets
+TMDB_API_KEY = os.getenv("TMDB_API_KEY", st.secrets.get("TMDB_API_KEY", "") if hasattr(st, "secrets") else "")
 TMDB_BASE    = "https://api.themoviedb.org/3"
 TMDB_IMG     = "https://image.tmdb.org/t/p/w300"
 
 # ── DIMENSIONI PSICOLOGICHE ───────────────────────────────────────────────────
 DIMENSIONS = {
-    "🔪 Tension & Mistero":   [9648, 80, 53, 10765],   # mystery, crime, thriller, sci-fi
-    "💔 Drama Profondo":      [18, 10749, 10751],        # drama, romance, family
-    "💥 Action & Adrenalina": [28, 10752, 12],           # action, war, adventure
-    "😂 Umorismo":            [35, 16],                  # comedy, animation
-    "🚀 Sci-Fi & Fantasy":    [10765, 14, 878],          # sci-fi/fantasy, fantasy, sci-fi
-    "🕵️ Crime & Noir":        [80, 9648, 53],            # crime, mystery, thriller
+    "🔪 Tension & Mistero":   [9648, 80, 53, 10765],
+    "💔 Drama Profondo":      [18, 10749, 10751],
+    "💥 Action & Adrenalina": [28, 10752, 12],
+    "😂 Umorismo":            [35, 16],
+    "🚀 Sci-Fi & Fantasy":    [10765, 14, 878],
+    "🕵️ Crime & Noir":        [80, 9648, 53],
 }
-
 DIM_LABELS = list(DIMENSIONS.keys())
 
-# Etichette psicologiche finali per ogni dimensione dominante
 PSYCH_LABELS = {
     "🔪 Tension & Mistero":   "Cacciatore di Adrenalina",
     "💔 Drama Profondo":      "Empatico Seriale",
@@ -44,7 +42,7 @@ def tmdb_get(endpoint, params=None):
 @st.cache_data(show_spinner=False)
 def search_series(query: str):
     data = tmdb_get("/search/tv", {"query": query})
-    return data.get("results", [])[:5]
+    return data.get("results", [])[:6]
 
 @st.cache_data(show_spinner=False)
 def get_series_details(series_id: int):
@@ -52,38 +50,24 @@ def get_series_details(series_id: int):
     keywords = tmdb_get(f"/tv/{series_id}/keywords")
     return details, keywords
 
-# ── LOGICA PROFILO ────────────────────────────────────────────────────────────
 def compute_profile(series_list):
-    """
-    Per ogni serie: raccoglie genre_ids.
-    Per ogni dimensione: conta quanti genre_ids matchano.
-    Normalizza 0-100.
-    """
     scores = defaultdict(float)
-
     for series in series_list:
         genre_ids = set(series.get("genre_ids", []))
-        # Se dettagli completi (da get_series_details), usa genres
         if "genres" in series:
             genre_ids = {g["id"] for g in series["genres"]}
-
         for dim, ids in DIMENSIONS.items():
             matches = len(genre_ids & set(ids))
             scores[dim] += matches
-
-    # Normalizza 0-100
     max_score = max(scores.values()) if scores and max(scores.values()) > 0 else 1
-    normalized = {dim: round((scores[dim] / max_score) * 100) for dim in DIM_LABELS}
-    return normalized
+    return {dim: round((scores[dim] / max_score) * 100) for dim in DIM_LABELS}
 
 def get_dominant_traits(profile, top_n=2):
     sorted_traits = sorted(profile.items(), key=lambda x: x[1], reverse=True)
     return [t for t in sorted_traits if t[1] > 0][:top_n]
 
-# ── RECOMMENDATION ────────────────────────────────────────────────────────────
 @st.cache_data(show_spinner=False)
 def get_recommendations(series_ids: tuple):
-    """Prende raccomandazioni TMDb per ogni serie, deduplicando."""
     seen = set(series_ids)
     recs = []
     for sid in series_ids:
@@ -94,194 +78,317 @@ def get_recommendations(series_ids: tuple):
                 recs.append(r)
     return recs[:6]
 
-# ── RADAR CHART ───────────────────────────────────────────────────────────────
 def make_radar(profile: dict):
     labels = list(profile.keys())
     values = list(profile.values())
-    values_closed = values + [values[0]]
-    labels_closed  = labels + [labels[0]]
-
     fig = go.Figure()
     fig.add_trace(go.Scatterpolar(
-        r=values_closed,
-        theta=labels_closed,
+        r=values + [values[0]],
+        theta=labels + [labels[0]],
         fill="toself",
-        fillcolor="rgba(99, 110, 250, 0.25)",
+        fillcolor="rgba(99,110,250,0.2)",
         line=dict(color="#636EFA", width=2.5),
         marker=dict(size=6, color="#636EFA"),
-        name="Il tuo profilo",
     ))
     fig.update_layout(
         polar=dict(
             bgcolor="rgba(0,0,0,0)",
-            radialaxis=dict(
-                visible=True,
-                range=[0, 100],
-                tickfont=dict(size=9, color="#888"),
-                gridcolor="rgba(150,150,150,0.2)",
-            ),
-            angularaxis=dict(
-                tickfont=dict(size=12),
-                gridcolor="rgba(150,150,150,0.2)",
-            ),
+            radialaxis=dict(visible=True, range=[0,100], tickfont=dict(size=9, color="#888"), gridcolor="rgba(150,150,150,0.2)"),
+            angularaxis=dict(tickfont=dict(size=11), gridcolor="rgba(150,150,150,0.2)"),
         ),
         showlegend=False,
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
-        margin=dict(t=40, b=40, l=60, r=60),
-        height=400,
+        margin=dict(t=30, b=30, l=50, r=50),
+        height=380,
     )
     return fig
 
-# ── UI ────────────────────────────────────────────────────────────────────────
+# ── MAIN ──────────────────────────────────────────────────────────────────────
 def main():
-    st.set_page_config(
-        page_title="SerieIdentikit",
-        page_icon="🎬",
-        layout="centered",
-    )
+    st.set_page_config(page_title="SerieIdentikit", page_icon="🎬", layout="wide")
 
-    # CSS custom
     st.markdown("""
     <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800;900&display=swap');
     html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
-    .big-title { font-size: 2.6rem; font-weight: 800; text-align: center; margin-bottom: 0; }
-    .subtitle  { font-size: 1.1rem; text-align: center; color: #888; margin-bottom: 2rem; }
-    .card { background: #1a1a2e; border-radius: 16px; padding: 1.2rem 1.5rem; margin-bottom: 1rem; }
+
+    .hero-title {
+        font-size: 3.2rem; font-weight: 900; text-align: center;
+        background: linear-gradient(135deg, #636EFA, #EF553B, #FFD700);
+        -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+        background-clip: text; margin-bottom: 0.3rem;
+    }
+    .hero-desc {
+        max-width: 640px; margin: 0 auto 0.5rem auto;
+        text-align: center; font-size: 1.05rem; color: #aaa; line-height: 1.7;
+    }
+    .step-row {
+        display: flex; justify-content: center; gap: 2rem;
+        margin: 1.2rem auto 2rem auto; max-width: 600px;
+    }
+    .step-item {
+        display: flex; flex-direction: column; align-items: center;
+        font-size: 0.85rem; color: #bbb; gap: 0.3rem;
+    }
+    .step-icon { font-size: 1.8rem; }
+    .step-label { font-weight: 600; color: #ddd; }
+
+    .selected-badge {
+        display: flex; align-items: center; gap: 0.7rem;
+        background: linear-gradient(135deg, #1a1a3e, #2a1a3e);
+        border: 1px solid #636EFA44; border-radius: 12px;
+        padding: 0.6rem 1rem; margin-top: 0.5rem;
+    }
+    .selected-badge .s-name { font-weight: 700; font-size: 0.95rem; }
+    .selected-badge .s-year { font-size: 0.8rem; color: #888; }
+    .selected-badge .s-tick { font-size: 1.2rem; color: #00C896; }
+
     .trait-badge {
         display: inline-block;
         background: linear-gradient(135deg, #636EFA, #EF553B);
         color: white; font-weight: 700; font-size: 1rem;
-        padding: 0.4rem 1rem; border-radius: 999px; margin: 0.2rem;
+        padding: 0.4rem 1.1rem; border-radius: 999px; margin: 0.2rem;
     }
-    .rec-title { font-weight: 600; font-size: 0.95rem; margin-top: 0.4rem; text-align: center; }
-    .rec-year  { font-size: 0.8rem; color: #888; text-align: center; }
-    .rec-score { font-size: 0.8rem; color: #FFD700; text-align: center; }
+    .rec-card {
+        background: #111827; border-radius: 12px;
+        padding: 0.5rem; margin-bottom: 0.5rem; text-align: center;
+    }
+    .rec-title { font-weight: 600; font-size: 0.88rem; margin-top: 0.4rem; }
+    .rec-meta  { font-size: 0.78rem; color: #888; }
+    .rec-score { font-size: 0.8rem; color: #FFD700; }
+
+    /* Modal overlay */
+    .modal-overlay {
+        position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+        background: rgba(0,0,0,0.8); z-index: 9999;
+        display: flex; align-items: center; justify-content: center;
+    }
+    .modal-box {
+        background: #0f0f1a; border: 1px solid #333; border-radius: 20px;
+        padding: 2rem; max-width: 680px; width: 90%; position: relative;
+    }
+
+    .how-step {
+        display: flex; align-items: flex-start; gap: 1rem;
+        background: #1a1a2e; border-radius: 12px; padding: 1rem 1.2rem;
+        margin-bottom: 0.8rem;
+    }
+    .how-num {
+        background: linear-gradient(135deg, #636EFA, #EF553B);
+        color: white; font-weight: 900; font-size: 1.1rem;
+        width: 2rem; height: 2rem; border-radius: 50%;
+        display: flex; align-items: center; justify-content: center;
+        flex-shrink: 0;
+    }
+    .how-text h4 { margin: 0 0 0.2rem 0; font-size: 0.95rem; color: #eee; }
+    .how-text p  { margin: 0; font-size: 0.85rem; color: #999; line-height: 1.5; }
     </style>
     """, unsafe_allow_html=True)
 
-    # Header
-    st.markdown('<div class="big-title">🎬 SerieIdentikit</div>', unsafe_allow_html=True)
-    st.markdown('<div class="subtitle">Scegli 3 serie. Scopri chi sei.</div>', unsafe_allow_html=True)
+    # ── HERO ──────────────────────────────────────────────────────────────────
+    st.markdown('<div class="hero-title">🎬 SerieIdentikit</div>', unsafe_allow_html=True)
+    st.markdown("""
+    <div class="hero-desc">
+        Tre serie TV. Migliaia di dati nascosti dietro ogni titolo.<br>
+        <strong>SerieIdentikit</strong> analizza i generi, i pattern narrativi e le affinità
+        tra le serie che ami — e costruisce la tua <em>carta d'identità psicologica</em>
+        da spettatore. Poi ti dice cosa guardare dopo.
+    </div>
+    <div class="step-row">
+        <div class="step-item"><span class="step-icon">🔍</span><span class="step-label">Cerca</span>3 serie che ami</div>
+        <div class="step-item"><span class="step-icon">⚡</span><span class="step-label">Analizza</span>i tuoi pattern</div>
+        <div class="step-item"><span class="step-icon">🪪</span><span class="step-label">Scopri</span>chi sei</div>
+        <div class="step-item"><span class="step-icon">🎯</span><span class="step-label">Ricevi</span>consigli su misura</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # ── COME FUNZIONA (popup) ─────────────────────────────────────────────────
+    col_btn_l, col_btn_m, col_btn_r = st.columns([3,2,3])
+    with col_btn_m:
+        show_how = st.button("❓ Come funziona?", use_container_width=True)
+
+    if show_how:
+        with st.expander("🔬 Come funziona SerieIdentikit", expanded=True):
+            st.markdown("""
+            <div class="how-step">
+                <div class="how-num">1</div>
+                <div class="how-text">
+                    <h4>Recupero dati da TMDb</h4>
+                    <p>Ogni serie che selezioni viene interrogata tramite le API di <strong>The Movie Database (TMDb)</strong>.
+                    Recuperiamo generi ufficiali, popolarità e metadati strutturati per ogni titolo.</p>
+                </div>
+            </div>
+            <div class="how-step">
+                <div class="how-num">2</div>
+                <div class="how-text">
+                    <h4>Feature Engineering sui generi</h4>
+                    <p>I generi TMDb vengono mappati su <strong>6 dimensioni psicologiche</strong> definite a priori
+                    (Tension, Drama, Action, Umorismo, Sci-Fi, Crime). Ogni serie contribuisce con i propri generi
+                    a costruire un vettore numerico.</p>
+                </div>
+            </div>
+            <div class="how-step">
+                <div class="how-num">3</div>
+                <div class="how-text">
+                    <h4>Aggregazione e normalizzazione</h4>
+                    <p>I vettori delle 3 serie vengono <strong>sommati e normalizzati 0–100</strong>.
+                    Il risultato è il tuo profilo: un punto nello spazio a 6 dimensioni che descrive
+                    il tuo "gusto cinematografico medio".</p>
+                </div>
+            </div>
+            <div class="how-step">
+                <div class="how-num">4</div>
+                <div class="how-text">
+                    <h4>Raccomandazione content-based</h4>
+                    <p>Le serie consigliate vengono recuperate tramite l'endpoint <code>/recommendations</code> di TMDb —
+                    un sistema ibrido che combina similarità di contenuto e segnali collaborativi
+                    basati sul comportamento di milioni di utenti.</p>
+                </div>
+            </div>
+            <div class="how-step">
+                <div class="how-num">5</div>
+                <div class="how-text">
+                    <h4>Visualizzazione del profilo</h4>
+                    <p>Il profilo viene rappresentato con un <strong>radar chart</strong> (le tue dimensioni dominanti)
+                    e un <strong>bar chart orizzontale</strong> per confronto immediato tra le dimensioni.
+                    Entrambi costruiti con <strong>Plotly</strong>.</p>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+    st.markdown("---")
 
     if not TMDB_API_KEY:
-        st.error("⚠️ TMDB_API_KEY non trovata. Aggiungila in `.streamlit/secrets.toml` o come variabile d'ambiente.")
+        st.error("⚠️ TMDB_API_KEY non trovata. Aggiungila in `.streamlit/secrets.toml`.")
         st.code('TMDB_API_KEY = "la_tua_chiave"', language="toml")
         st.stop()
 
-    # ── SELEZIONE SERIE ───────────────────────────────────────────────────────
+    # ── SELEZIONE SERIE — 3 colonne ───────────────────────────────────────────
+    st.markdown("### 🎬 Scegli le tue 3 serie")
+    cols_sel = st.columns(3)
     selected_series = []
 
-    for i in range(1, 4):
-        st.markdown(f"#### Serie {i}")
-        query = st.text_input(f"Cerca serie #{i}", key=f"q{i}", placeholder="es. Breaking Bad, The Bear, Dark...")
+    for i, col in enumerate(cols_sel, start=1):
+        with col:
+            st.markdown(f"**Serie {i}**")
+            key_q   = f"q{i}"
+            key_sel = f"sel{i}"
+            key_confirmed = f"confirmed{i}"
 
-        if query:
-            with st.spinner("Cerco..."):
-                results = search_series(query)
-
-            if not results:
-                st.warning("Nessun risultato.")
+            # Se già confermata, mostra badge e bottone reset
+            if st.session_state.get(key_confirmed):
+                s = st.session_state[key_confirmed]
+                year = s.get("first_air_date", "????")[:4]
+                poster = s.get("poster_path")
+                if poster:
+                    st.image(TMDB_IMG + poster, use_container_width=True)
+                st.markdown(f"""
+                <div class="selected-badge">
+                    <span class="s-tick">✓</span>
+                    <div><div class="s-name">{s['name']}</div><div class="s-year">{year}</div></div>
+                </div>
+                """, unsafe_allow_html=True)
+                if st.button("✏️ Cambia", key=f"reset{i}"):
+                    del st.session_state[key_confirmed]
+                    if key_q in st.session_state:
+                        del st.session_state[key_q]
+                    st.rerun()
+                selected_series.append(s)
             else:
-                options = {f"{r['name']} ({r.get('first_air_date','?')[:4]})": r for r in results}
-                choice = st.selectbox(f"Seleziona serie #{i}", list(options.keys()), key=f"sel{i}")
-                if choice:
-                    selected_series.append(options[choice])
+                query = st.text_input(
+                    f"Cerca...", key=key_q,
+                    placeholder="es. Breaking Bad, Dark, The Bear",
+                    label_visibility="collapsed"
+                )
+                if query:
+                    with st.spinner(""):
+                        results = search_series(query)
+                    if not results:
+                        st.warning("Nessun risultato.")
+                    else:
+                        options = {f"{r['name']} ({r.get('first_air_date','?')[:4]})": r for r in results}
+                        choice = st.selectbox("", list(options.keys()), key=key_sel, label_visibility="collapsed")
+                        if st.button("✅ Conferma", key=f"conf{i}", use_container_width=True):
+                            st.session_state[key_confirmed] = options[choice]
+                            st.rerun()
 
-        st.divider()
+    st.markdown("<br>", unsafe_allow_html=True)
 
     # ── ANALISI ───────────────────────────────────────────────────────────────
     if len(selected_series) == 3:
         if st.button("🔍 Analizza il mio profilo", type="primary", use_container_width=True):
             with st.spinner("Costruisco il tuo identikit..."):
-
-                # Fetch dettagli completi per generi precisi
                 enriched = []
                 for s in selected_series:
                     details, _ = get_series_details(s["id"])
                     enriched.append(details)
 
-                profile = compute_profile(enriched)
+                profile  = compute_profile(enriched)
                 dominant = get_dominant_traits(profile, top_n=2)
-
-                # ── CARTA D'IDENTITÀ ──────────────────────────────────────────
-                st.markdown("---")
-                st.markdown("## 🪪 La tua Carta d'Identità")
-
-                col1, col2 = st.columns([1.2, 1])
-
-                with col1:
-                    st.markdown("**Il tuo profilo psicologico:**")
-                    for dim, score in dominant:
-                        label = PSYCH_LABELS.get(dim, dim)
-                        st.markdown(
-                            f'<span class="trait-badge">{label} {score}%</span>',
-                            unsafe_allow_html=True
-                        )
-                    st.markdown("<br>", unsafe_allow_html=True)
-
-                    # Barre dimensioni
-                    df_profile = pd.DataFrame(
-                        list(profile.items()), columns=["Dimensione", "Score"]
-                    ).sort_values("Score", ascending=True)
-
-                    fig_bar = go.Figure(go.Bar(
-                        x=df_profile["Score"],
-                        y=df_profile["Dimensione"],
-                        orientation="h",
-                        marker=dict(
-                            color=df_profile["Score"],
-                            colorscale="Viridis",
-                        ),
-                        text=df_profile["Score"].astype(str) + "%",
-                        textposition="outside",
-                    ))
-                    fig_bar.update_layout(
-                        paper_bgcolor="rgba(0,0,0,0)",
-                        plot_bgcolor="rgba(0,0,0,0)",
-                        xaxis=dict(range=[0,115], showgrid=False, visible=False),
-                        yaxis=dict(tickfont=dict(size=12)),
-                        margin=dict(t=10, b=10, l=10, r=10),
-                        height=280,
-                    )
-                    st.plotly_chart(fig_bar, use_container_width=True)
-
-                with col2:
-                    st.markdown("**Radar del tuo profilo:**")
-                    st.plotly_chart(make_radar(profile), use_container_width=True)
-
-                # ── RACCOMANDAZIONI ───────────────────────────────────────────
-                st.markdown("---")
-                st.markdown("## 🎯 Serie consigliate per te")
-
                 series_ids = tuple(s["id"] for s in enriched)
                 recs = get_recommendations(series_ids)
 
+            st.markdown("---")
+            st.markdown("## 🪪 La tua Carta d'Identità")
+
+            # Badge tratti dominanti
+            for dim, score in dominant:
+                label = PSYCH_LABELS.get(dim, dim)
+                st.markdown(f'<span class="trait-badge">{label} · {score}%</span>', unsafe_allow_html=True)
+            st.markdown("<br>", unsafe_allow_html=True)
+
+            # ── DUE COLONNE: statistiche | raccomandazioni ─────────────────
+            left_col, right_col = st.columns([1, 1], gap="large")
+
+            with left_col:
+                st.markdown("#### 📊 Il tuo profilo")
+
+                # Bar chart
+                df_profile = pd.DataFrame(list(profile.items()), columns=["Dimensione","Score"]).sort_values("Score", ascending=True)
+                fig_bar = go.Figure(go.Bar(
+                    x=df_profile["Score"], y=df_profile["Dimensione"], orientation="h",
+                    marker=dict(color=df_profile["Score"], colorscale="Viridis"),
+                    text=df_profile["Score"].astype(str) + "%", textposition="outside",
+                ))
+                fig_bar.update_layout(
+                    paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                    xaxis=dict(range=[0,120], showgrid=False, visible=False),
+                    yaxis=dict(tickfont=dict(size=12)),
+                    margin=dict(t=10, b=10, l=10, r=10), height=260,
+                )
+                st.plotly_chart(fig_bar, use_container_width=True)
+
+                # Radar chart
+                st.markdown("#### 🕸️ Radar")
+                st.plotly_chart(make_radar(profile), use_container_width=True)
+
+            with right_col:
+                st.markdown("#### 🎯 Serie consigliate per te")
                 if recs:
-                    cols = st.columns(3)
+                    rec_cols = st.columns(3)
                     for idx, rec in enumerate(recs[:6]):
-                        with cols[idx % 3]:
+                        with rec_cols[idx % 3]:
+                            st.markdown('<div class="rec-card">', unsafe_allow_html=True)
                             if rec.get("poster_path"):
-                                st.image(
-                                    TMDB_IMG + rec["poster_path"],
-                                    use_container_width=True,
-                                )
-                            year = rec.get("first_air_date", "?")[:4]
+                                st.image(TMDB_IMG + rec["poster_path"], use_container_width=True)
+                            year  = rec.get("first_air_date","?")[:4]
                             score = rec.get("vote_average", 0)
                             st.markdown(f'<div class="rec-title">{rec["name"]}</div>', unsafe_allow_html=True)
-                            st.markdown(f'<div class="rec-year">{year}</div>', unsafe_allow_html=True)
-                            st.markdown(f'<div class="rec-score">⭐ {score:.1f}</div>', unsafe_allow_html=True)
+                            st.markdown(f'<div class="rec-meta">{year} · <span class="rec-score">⭐ {score:.1f}</span></div>', unsafe_allow_html=True)
+                            st.markdown('</div>', unsafe_allow_html=True)
                 else:
-                    st.info("Nessuna raccomandazione trovata per queste serie.")
+                    st.info("Nessuna raccomandazione trovata.")
 
     elif 0 < len(selected_series) < 3:
-        st.info(f"Seleziona ancora {3 - len(selected_series)} serie per ottenere il tuo identikit.")
+        st.info(f"Mancano ancora {3 - len(selected_series)} serie — selezionale e conferma.")
 
-    # Footer
+    # ── FOOTER ────────────────────────────────────────────────────────────────
     st.markdown("---")
     st.markdown(
-        '<p style="text-align:center; color:#555; font-size:0.8rem;">Dati da <a href="https://www.themoviedb.org" target="_blank">TMDb</a> · Progetto portfolio di Riccardo</p>',
+        '<p style="text-align:center;color:#555;font-size:0.8rem;">Dati da '
+        '<a href="https://www.themoviedb.org" target="_blank">TMDb</a> · '
+        'Progetto portfolio di Riccardo</p>',
         unsafe_allow_html=True
     )
 
